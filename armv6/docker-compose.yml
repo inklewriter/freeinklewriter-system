@@ -1,0 +1,23 @@
+version: '2'
+
+volumes:
+  inkledb:
+    external: false
+
+services:
+
+  db:
+    env_file: .env
+    image: arm32v6/postgres
+    volumes:
+      - inkledb:/opt
+      
+  app:
+    env_file: .env
+    image: albancrommer/freeinklewriter-arm:latest
+    ports:
+      - "3000:3000"
+    depends_on:
+      - db
+  
+
