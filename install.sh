@@ -1,103 +1,76 @@
 #!/bin/bash
 
-PACKAGELIST+=(build-essential)
-PACKAGELIST+=(git)
-PACKAGELIST+=(liblzma-dev)
-PACKAGELIST+=(libpq-dev)
-PACKAGELIST+=(libsqlite3-dev)
-PACKAGELIST+=(nginx-light)
-PACKAGELIST+=(nodejs)
-PACKAGELIST+=(npm)
-PACKAGELIST+=(patch)
-PACKAGELIST+=(postgresql-11)
-PACKAGELIST+=(pwgen)
-PACKAGELIST+=(ruby-dev)
-PACKAGELIST+=(ruby-rails)
-PACKAGELIST+=(zlib1g-dev)
-
-apt update
-apt install -y --no-install-recommends ${PACKAGELIST[@]}
-
-cd ~www-data/
-
-git clone https://github.com/inklewriter/freeinklewriter
-
-cd freeinklewriter/
+set -e 
 
 
-cat > /etc/postgresql/11/main/pg_hba.conf << HEREDOC
-local   all             postgres                                peer
-local   all             all                                     md5
-host    all             all             127.0.0.1/32            md5
-host    all             all             ::1/128                 md5
-local   replication     all                                     peer
-host    replication     all             127.0.0.1/32            md5
-host    replication     all             ::1/128                 md5
-HEREDOC
-su postgres -c " psql -c \" CREATE ROLE www WITH CREATEDB LOGIN PASSWORD  'inklewriter' ; \" "
-su postgres -c " createdb inklewriter_prod -O www"
-service postgresql restart
+_msg(){ echo $@; }
+_panic(){ _msg $@; exit 2; }
+_apt_update(){ [[ -n "$apt_updated" ]] && return ; apt update;}
+_require_package(){ 
+  local bin=$1
+  local pack=${2:-$1}
+  _msg "Installing $pack"
+  _apt_update
+  which $bin &>/dev/null || apt install -y --no-install-recommends $pack 
+}
+declare -a installationMethods
+installationMethods+=( "docker" )
+installationMethods+=( "native" )
+apt_updated=""
 
-cat >/etc/systemd/system/inklewriter.service << HEREDOC
-[Unit]
-Description=Inklewriter Server
-Requires=network.target
-
-[Service]
-Type=simple
-User=www-data
-Group=www-data
-WorkingDirectory=/var/www/freeinklewriter
-ExecStart=/bin/bash -lc 'RAILS_ENV=production PORT=8080 bundle exec puma -C config/puma.rb'
-TimeoutSec=30
-RestartSec=15s
-Restart=always
-
-[Install]
-WantedBy=multi-user.target
-HEREDOC
-
-## Rails configuration
-
-cat > config/database.yml << HEREDOC
-default: &default
-        adapter: postgresql
-        encoding: unicode
-        pool: 5
-        username: www
-        password: inklewriter
-        host: 127.0.0.1
-development:
-  <<: *default
-  database: inklewriter_dev
-# Warning: The database defined as "test" will be erased and
-# re-generated from your development database when you run "rake".
-# Do not set this db to the same as development or production.
-test:
-  <<: *default
-  database: inklewriter_test
-
-production:
-  <<: *default
-  database: inklewriter_prod
-HEREDOC
+# check is root
+[[ "root" != "$( whoami )" ]] && _panic "You must run this script as root. Exiting."
 
 
-cat >config/secrets.yml  << HEREDOC
-production:
-  secret_key_base: "inklewriter"
-HEREDOC
+# Choose installation method
+_msg "Please choose the installation method."
+select method in ${installationMethods[@]}; do 
 
-cd /var/www/freeinklewriter
+  let $(( REPLY-- ))
+  [[ -z ${installationMethods[$REPLY]} ]] && _panic "No such method. Exiting"
+  break
 
-bundle install
+done
 
-chown -R www-data:www-data /var/www/freeinklewriter
+# check required executables
+_require_package lsb_release lsb-release
+# Detect the system
+architecture=$( uname -m )
+release=$(lsb_release -rs)
+distrib=$(lsb_release -is)
+
+if [[ "${method}" == "docker" ]]; then 
+
+  _require_package docker-compose
+  _require_package docker docker.io
 
 
-su www-data -s /bin/bash -c "bin/rails db:migrate RAILS_ENV=production"
-su www-data -s /bin/bash -c "rake assets:precompile"
+  if [[ "$architecture" != "x86_64" ]] && [[ "$architecture" != "armv7" ]]; then 
+    _panic "Invalid architecture '$architecture'. Exiting"
+  fi
 
-systemctl enable inklewriter
-systemctl start inklewriter
+  defaultDockerDir=/opt/inklewriter
+  read -p "$( _msg "Please define the permanent installation folder (Default: $defaultDockerDir): ")" dockerDir
+  dockerDir=${dockerDir:-$defaultDockerDir}
+  mkdir -p $dockerDir
+  cp "docker-${architecture}/docker-compose.yml" "${dockerDir}"
+  cp common/.env "${dockerDir}"
+  cd "${dockerDir}"
+  docker-compose up
 
+
+elif [[ "${method}" == "native" ]]; then
+
+  # Check for debian
+  if [[ "$distrib" != "Debian" ]] || [[ $release -lt 10 ]]; then 
+    _panic "This script won't run on $distrib $release"
+  fi
+
+  # Execute the native install
+  _msg "Running the install script"
+  bash debian-10/install.sh
+
+fi
+
+
+# EOF
