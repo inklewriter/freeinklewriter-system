@@ -12,3 +12,6 @@
 
 # Vim
 *.swp
+
+# intellij
+.idea
