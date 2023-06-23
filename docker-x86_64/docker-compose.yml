@@ -2,7 +2,9 @@ version: '2'
 
 volumes:
   inkledb:
-    external: false
+
+networks:
+  inklenet:
 
 services:
 
@@ -11,13 +13,18 @@ services:
     image: postgres
     volumes:
       - inkledb:/opt
+    networks:
+      - inklenet
       
   app:
     env_file: .env
     image: albancrommer/inklewriter:latest
     ports:
       - "3000:3000"
+    networks:
+      - inklenet
     depends_on:
       - db
   
 
+      
