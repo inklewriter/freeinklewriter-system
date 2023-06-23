@@ -1,0 +1,86 @@
+---
+replicaCount: 1
+
+image:
+  repository: albancrommer/inklewriter
+  pullPolicy: IfNotPresent
+  tag: "1.0"
+
+environment:
+  SECRET_KEY_BASE: "development_secret"
+  RAILS_ENV: "production"
+  MAILING_ADDRESS: "127.0.0.1"
+  MAILING_PORT: "25"
+  MAILING_USER: "test"
+  MAILING_PASSWORD: "user_smtp_password"
+  MAILING_DOMAIN: "inklewriter.com"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: false
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+
+podSecurityContext: {}
+
+securityContext: {}
+
+service:
+  type: ClusterIP
+  port: 80
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: chart-example.local
+      paths:
+        - path: /
+          pathType: ImplementationSpecific
+  tls: []
+
+resources: {}
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 100
+  targetCPUUtilizationPercentage: 80
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+postgresql:
+  auth:
+    username: web
+    password: super_secure
+    database: inklewriter_prod
+  primary:
+    podSecurityContext:
+      enabled: false
+      fsGroup: ""
+    containerSecurityContext:
+      enabled: false
+      runAsUser: "auto"
+
+  readReplicas:
+    podSecurityContext:
+      enabled: false
+      fsGroup: ""
+    containerSecurityContext:
+      enabled: false
+      runAsUser: "auto"
+
+  volumePermissions:
+    enabled: false
+    securityContext:
+      runAsUser: "auto"
